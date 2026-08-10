@@ -1,0 +1,9 @@
+pycache/
+*.pyc
+.DS_Store
+*.epub
+*.html
+*.md
+!README.md
+!CHANGELOG.md
+!CONTRIBUTING.md
