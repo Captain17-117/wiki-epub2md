@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wiki-epub2md"
+version = "1.1.0"
+description = "將維基文庫 EPUB 轉為乾淨 Markdown 的工具"
+readme = "README.md"
+requires-python = ">=3.7"
+license = {text = "MIT"}
+dependencies = [
+    "beautifulsoup4>=4.9.0",
+]
+
+# 注册命令行入口：终端输入 wiki2md 就会自动运行 WikiEpub2md.py 里的 main() 函数
+[project.scripts]
+wiki2md = "WikiEpub2md:main"
+
+[tool.setuptools]
+py-modules = ["WikiEpub2md"]

@@ -1,8 +1,20 @@
-pycache/
-*.pyc
+# Python 编译缓存
+__pycache__/
+*.py[cod]
+
+# 本地安装配置缓存
+*.egg-info/
+build/
+dist/
+
+# 系统垃圾文件
 .DS_Store
+
+# 忽略测试用的书籍文件
 *.epub
 *.html
+
+# 忽略所有 Markdown 文件，但保留项目核心文档
 *.md
 !README.md
 !CHANGELOG.md

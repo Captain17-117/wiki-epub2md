@@ -585,34 +585,31 @@ def get_default_output_path(input_path):
 # ==========================================
 # 命令列介面 (CLI)
 # ==========================================
-
-def main():
-    parser = argparse.ArgumentParser(
-        description='將維基文庫古籍 EPUB/HTML 轉為乾淨 Markdown (自動注入 YAML 元數據，兼顧 AI 語料與閱讀體驗)'
-    )
-    parser.add_argument('input', help='輸入檔案路徑（.html 或 .epub）')
-    parser.add_argument('output', nargs='?', help='輸出 Markdown 路徑（預設為同目錄下同名 .md）')
-    parser.add_argument('--hard-break', action='store_true',
-                        help='Markdown 強制換行（每行末尾追加兩個空格），適合無標點古籍與豎排排版')
-    parser.add_argument('--keep-links', action='store_true',
-                        help='保留超連結（預設為移除以提升 AI 語料純淨度）')
-    
-    args = parser.parse_args()
-    
-    if not os.path.isfile(args.input):
-        print(f"錯誤：找不到檔案 {args.input}")
-        sys.exit(1)
         
-    output = args.output or get_default_output_path(args.input)
-    print(f"開始轉換: {args.input} -> {output}")
-    
+def process_file(input_file, output_path, hard_break, keep_links):
+    """處理單一檔案的輔助函數"""
+    # 決定輸出路徑：如果輸出路徑是目錄，則放進該目錄；否則使用預設
+    if output_path and os.path.isdir(output_path):
+        base_name = os.path.basename(input_file)
+        name_no_ext = os.path.splitext(base_name)[0]
+        output = os.path.join(output_path, name_no_ext + '.md')
+    elif output_path and not os.path.isdir(output_path) and not input_file.endswith(output_path):
+        # 針對單一檔案指定了輸出檔名
+        output = output_path
+    else:
+        output = get_default_output_path(input_file)
+        
+    print(f"  轉換: {input_file} -> {output}")
     try:
-        ext = os.path.splitext(args.input)[1].lower()
+        ext = os.path.splitext(input_file)[1].lower()
         if ext == '.epub':
-            md = epub_to_md(args.input, hard_break=args.hard_break, keep_links=args.keep_links)
+            md = epub_to_md(input_file, hard_break=hard_break, keep_links=keep_links)
+        elif ext in ('.html', '.htm'):
+            md = html_to_md(input_file, hard_break=hard_break, keep_links=keep_links)
         else:
-            md = html_to_md(args.input, hard_break=args.hard_break, keep_links=args.keep_links)
-            
+            print(f"  跳過：不支援的副檔名 {ext}")
+            return
+
         with open(output, 'w', encoding='utf-8') as f:
             f.write(md)
             
@@ -620,10 +617,65 @@ def main():
             with open(output, 'a', encoding='utf-8') as f:
                 f.write('\n')
                 
-        print(f"轉換完成！共輸出 {md.count(chr(10)) + 1} 行，{len(md)} 個字元。")
+        print(f"  完成！輸出 {md.count(chr(10)) + 1} 行，{len(md)} 個字元。\n")
     except Exception as e:
+        print(f"  錯誤：轉換失敗")
         import traceback
         traceback.print_exc()
+
+def main():
+    # 讀取環境變數 (支援 1, true, yes 等寫法)
+    env_input = os.environ.get('WIKI2MD_INPUT')
+    env_output = os.environ.get('WIKI2MD_OUTPUT')
+    env_hard_break = os.environ.get('WIKI2MD_HARD_BREAK', '').lower() in ('1', 'true', 'yes')
+    env_keep_links = os.environ.get('WIKI2MD_KEEP_LINKS', '').lower() in ('1', 'true', 'yes')
+
+    parser = argparse.ArgumentParser(
+        description='將維基文庫古籍 EPUB/HTML 轉為乾淨 Markdown (自動注入 YAML 元數據)'
+    )
+    
+    # 修改：input 預設值為 '.'（當前目錄）
+    parser.add_argument('input', nargs='?', default=env_input or '.', 
+                        help='輸入檔案或目錄路徑。若不填則預設掃描「當前目錄」。')
+    parser.add_argument('output', nargs='?', default=env_output, 
+                        help='輸出 Markdown 路徑或目錄。')
+    
+    parser.add_argument('-b', '--hard-break', action='store_true', default=env_hard_break,
+                        help='Markdown 強制換行')
+    parser.add_argument('-l', '--keep-links', action='store_true', default=env_keep_links,
+                        help='保留超連結')
+    
+    args = parser.parse_args()
+    target = args.input
+    
+    # 判斷是單一檔案還是目錄
+    if os.path.isfile(target):
+        print(f"開始處理單一檔案...")
+        process_file(target, args.output, args.hard_break, args.keep_links)
+        
+    elif os.path.isdir(target):
+        print(f"掃描目錄: {os.path.abspath(target)}")
+        
+        # 若指定了 output 且該目錄不存在，則自動建立
+        if args.output and not os.path.exists(args.output):
+            os.makedirs(args.output, exist_ok=True)
+            print(f"建立輸出目錄: {args.output}")
+            
+        # 尋找支援的檔案
+        files = [f for f in os.listdir(target) if f.lower().endswith(('.epub', '.html', '.htm'))]
+        
+        if not files:
+            print("目錄中沒有找到 .epub 或 .html 檔案。")
+            sys.exit(0)
+            
+        print(f"找到 {len(files)} 個檔案，開始批次轉換...\n")
+        for f in files:
+            full_path = os.path.join(target, f)
+            process_file(full_path, args.output, args.hard_break, args.keep_links)
+            
+        print("目錄批次轉換全部完成！")
+    else:
+        print(f"錯誤：找不到檔案或目錄 '{target}'")
         sys.exit(1)
 
 if __name__ == '__main__':
